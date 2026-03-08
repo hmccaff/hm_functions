@@ -7,9 +7,9 @@ timestamp <- function(prefix, ext = "csv") {
 
 
 # returns df with all dupes of specified variable
-dup<-
-  function(df,id){
-    df[unlist(df[,id]) %in% unlist(df[duplicated(df[,id]),id]) ,]
+dup <-
+  function(df, id) {
+    df[unlist(df[, id]) %in% unlist(df[duplicated(df[, id]), id]), ]
   }
 
 
