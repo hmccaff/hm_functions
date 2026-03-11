@@ -104,11 +104,12 @@ fmtp <-
            function(x){
              if(is.na(x)){
                return('')
-             }else if(round(x,3)==0){
-               return(paste('**',"<0.001",'**',sep=''))
-             }
-             else if(x<.05){
-               return(paste('**',sprintf(x,fmt="%.3f"),'**',sep=''))
+             }else if(x < .001){
+               return(paste("<0.001",'***',sep=''))
+             }else if(x<.01){
+                return(paste(sprintf(x,fmt="%.3f"),'**',sep=''))
+             }else if(x<.05){
+               return(paste(sprintf(x,fmt="%.3f"),'*',sep=''))
              }else{
                return(sprintf(x,fmt="%.3f"))
              }
