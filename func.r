@@ -1,5 +1,90 @@
 #My functions
 
+#takes a model summary table and creates a forester plot with category headers, subcategories, and 
+#variable removal options
+fp <-
+function(
+  modtab,
+  remove_vars = 'xxxxxxxxx',  
+  cat_headers = 'xxxxxxxxx',  
+  cat_header_pos = 'xxxxxxxxx',
+  subcats = 'xxxxxxxxx',  
+  estimate_name_ci = "Estimate (95% CI)",
+  is_scale_linear = FALSE,
+  x_min_to_use = 0.05,
+  x_max_to_use = 6,
+  left_arrow = "Lower",
+  right_arrow = "Higher",
+  display_plot=FALSE,
+  path_to_output_file = NULL) {
+
+
+
+    #take off the bottom rows with model information
+    top <- 
+    modtab[-(which(modtab$`Model Results`=='---')[1]:nrow(modtab)),]%>%
+    rename(Variable = `Model Results`)%>%
+    mutate(
+      #indent all subcat rows
+      Variable = 
+          if_else(Variable %in% subcats,
+          paste0("  ", Variable),  
+          Variable),
+      #column confint contains characters of this form (CI_LL, CI_UL), so we need to split this into two columns
+      CI_LL = as.numeric(sub("^\\(([0-9.]+),.*\\)$", "\\1", confint)),
+      CI_UL = as.numeric(sub(".*,\\s*([0-9.]+)\\)$", "\\1", confint))
+    )%>%
+    select(c(1,2,5,6,4))
+
+    #insert rows with category labels
+    n_cats <- length(cat_headers)
+    positions <- sapply(cat_header_pos, function(p) grep(p, top$Variable, fixed = TRUE)[1])
+    parts <- list(top[1:(positions[1] - 1), ])
+    for (i in seq_len(n_cats)) {
+      parts <- c(parts, list(setNames(data.frame(cat_headers[[i]], NA, NA, NA, NA), names(top))))
+      end_row <- if (i < n_cats) positions[i + 1] - 1 else nrow(top)
+      parts <- c(parts, list(top[positions[i]:end_row, ]))
+    }
+    mt <- do.call(rbind, parts)
+
+    #remove rows with variables we don't want to display
+    rows_to_remove <- unlist(lapply(remove_vars, function(v) grep(v, mt$Variable, fixed = TRUE)))
+    if (length(rows_to_remove) > 0) mt <- mt[-rows_to_remove, ]
+    mt[,2:4] <- lapply(mt[,2:4],as.numeric)
+    # ensure no NA values in the Variable column (forester can't render NULL/NA strings)
+    mt$Variable[is.na(mt$Variable)] <- ""
+
+  
+
+    library(forester)
+      forester(
+        left_side_data = mt[1],
+        estimate = mt[[2]],
+        ci_low = mt[[3]],
+        ci_high = mt[[4]],
+        estimate_precision = 2,
+        null_line_at = 1,
+        xlim = c(x_min_to_use, x_max_to_use),
+        estimate_col_name = estimate_name_ci,
+        x_scale_linear = is_scale_linear,
+        arrow_labels = c(left_arrow, right_arrow),
+        arrows=TRUE,
+        nudge_height = .05,justify=c(0,.5),
+        # ggplot_width = 30,
+        nudge_x = .3,
+        #nudge_width = 1,
+        font_family = "Arial",
+        xbreaks = c(x_min_to_use, 1, x_max_to_use),
+        ci_sep = ', ',
+        display = display_plot,
+        file_path = path_to_output_file
+      )
+  }
+
+
+
+
+
 # Utility function to time-stamp filenames
 timestamp <- function(prefix, ext = "csv") {
   paste0(prefix, "_", format(Sys.Date(), "%y%m%d"), ".", ext)
@@ -10,39 +95,6 @@ timestamp <- function(prefix, ext = "csv") {
 dup <-
   function(df, id) {
     df[unlist(df[, id]) %in% unlist(df[duplicated(df[, id]), id]), ]
-  }
-
-
-# takes lm object and outputs a OR/CI/p value table
-# ******* deprecated *************
-cilm <-
-  function(mod){
-    coef <- summary(mod)$coefficients
-    ci <- confint.default(mod)
-    coef[,2:3] <- ci
-    colnames(coef) <- c('Estimate', '95% LB', '95% UB','p value')
-    
-    return(round(coef,3))
-    
-  }
-
-
-# takes glm object (logistic regression model) and outputs a OR/CI/p value table
-# ******* deprecated *************
-cilog <-
-  function(mod){
-    sm <- summary(mod)
-    coef <- sm$coefficients[,1]
-    p <- sm$coefficients[,4]
-    ci <- confint.default(mod)
-    
-    ctab <- cbind(coef,ci,p)
-    ctab[,1:3] <- exp(ctab[,1:3])
-    
-    colnames(ctab)[1] <- 'OR'
-    
-    return(round(ctab,3))
-    
   }
 
 
@@ -265,84 +317,34 @@ modstack<-
     stack
   }
 
-# #binds two data frames of different row count, filling blanks with whitespace
-# cbind_fill <-
-#   function(x,y){
-#     
-#     #if x and y have equal rows
-#     if((nrow(x) - nrow(y)) == 0){
-#       
-#       #divider
-#       div <- data.frame('.'=rep('',nrow(x)))
-#       
-#       df <- cbind(x,div,y)
-#       
-#       df
-#     }
-#     
-#     #if x has more rows: big model -> small model 
-#     else if((nrow(x) - nrow(y)) > 0){
-#       extrarows <- nrow(x) - nrow(y)
-#       
-#       #top of y - estimates
-#       top <- y[1:which(y[,1]=='---')-1,]
-#       
-#       #bottom of y - summary stats
-#       bot <- y[which(y[,1]=='---'):nrow(y),]
-#       
-#       #empty cells between estimates and summary stats
-#       midrow <- rep('',ncol(y))
-#       mid <- data.frame(t(replicate(extrarows, midrow)))
-#       names(mid) <- names(y)
-#     
-#       newy <- rbind(top,mid,bot)
-#       
-#       #divider
-#       div <- data.frame('.'=rep('',nrow(x)))
-#       
-#       df <- cbind(x,div,newy)
-#       
-#       df
-#     }
-#     
-#     #if y has more rows: small model -> big model
-#     else if((nrow(x) - nrow(y)) < 0){
-#       extrarows <- nrow(y) - nrow(x)
-#       
-#       #top of x - estimates
-#       top <- x[1:which(x[,1]=='---')-1,]
-#       
-#       #bottom of y - summary stats
-#       bot <- x[which(x[,1]=='---'):nrow(x),]
-#       
-#       #empty cells between estimates and summary stats
-#       midrow <- rep('',ncol(x))
-#       mid <- data.frame(t(replicate(extrarows, midrow)))
-#       names(mid) <- names(x)
-#       
-#       newx <- rbind(top,mid,bot)
-#       
-#       #divider
-#       div <- data.frame('.'=rep('',nrow(y)))
-#       
-#       df <- cbind(newx,div,y)
-#       
-#       df
-#     }
-#     
-#     
-#   }
-# 
-# #uses cbind_fill to make a list of mods into a wide "stack" in order
-# modstack<-
-#   function(mods){
-#     stack <- mods[[1]]
-#     for(i in 2:length(mods)){
-#       stack <- cbind_fill(stack,mods[[i]])
-#     }
-#     stack
-#   }
 
+#function to write regression tables (modstack objects) with headers and styling
+mod_to_ws <- function(modstack, sheet_name, headers, subheaders, start_row=3,workbook=wb) {
+  row_counter <- start_row
+  for (i in seq_along(modstack)) {
+    writeData(workbook, sheet = sheet_name, modstack[[i]], startRow = row_counter, colNames = TRUE)
+    # Add main header text from vector
+    writeData(workbook, sheet = sheet_name, x = headers[i], startCol = 1, startRow = row_counter - 2)
+    # Add sub-header text before merging and styling
+    n_subheaders <- ncol(subheaders)
+    for (j in seq_len(n_subheaders)) {
+      start_col <- 1 + (j - 1) * 5  # 4 columns per block, 1 col gap between blocks
+      writeData(workbook, sheet = sheet_name, x = subheaders[i, j], startCol = start_col, startRow = row_counter - 1)
+      mergeCells(workbook, sheet = sheet_name, cols = start_col:(start_col + 3), rows = row_counter - 1)
+    }
+    mergeCells(workbook, sheet = sheet_name, cols = 1:ncol(modstack[[i]]), rows = row_counter - 2)
+    # Add centered, bold text to merged cells
+    headerStyle <- createStyle(textDecoration = "bold", halign = "center", valign = "center", fgFill = "#BDD7EE")
+    subHeaderStyle <- createStyle(textDecoration = "bold", halign = "center", valign = "center", fgFill = "#D9EAF7")
+    # Main merged header (above table)
+    addStyle(workbook, sheet = sheet_name, style = headerStyle, rows = row_counter - 2, cols = 1:ncol(modstack[[i]]), gridExpand = TRUE)
+    for (j in seq_len(n_subheaders)) {
+      start_col <- 1 + (j - 1) * 5
+      addStyle(workbook, sheet = sheet_name, style = subHeaderStyle, rows = row_counter - 1, cols = start_col:(start_col + 3), gridExpand = TRUE)
+    }
+    row_counter <- row_counter + nrow(modstack[[i]]) + 3    
+  }
+}
 
 
 #takes a posterior object and creates esetimate, CI and pseudo p
@@ -1509,11 +1511,19 @@ coeftab <-
     
     
     #replace row names with labels from modlabs vector
+    #ensure row names occur in the same order as modlabs vector
     if(labs==T){
       if(exists("modlabs", envir = .GlobalEnv)){
-          rownames(df) <- ifelse(rownames(df) %in% names(modlabs), 
-                           modlabs[rownames(df)], 
+          #subset modlabs to include only those in the row names of df
+          ml <- modlabs[names(modlabs) %in% rownames(df)]
+          rownames(df) <- ifelse(rownames(df) %in% names(ml), 
+                           ml[rownames(df)], 
                            rownames(df))  # Replace with corresponding new name
+          #reorder rows of df to match order of modlabs
+          top <- df[-(which(rownames(df)=='---')[1]:nrow(df)),]
+          bot <- df[(which(rownames(df)=='---')[1]:nrow(df)),]
+          top <- top[match(ml, rownames(top)), ]
+          df <- rbind(top, bot)
     }else{stop('error: no modlabs provided in environment')}
     }
     
