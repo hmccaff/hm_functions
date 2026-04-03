@@ -919,6 +919,22 @@ coeftab <-
         pval <- 
           summary(fit)$coefficients[-1,5]%>%
           fmtp
+      }else if(type=='exp'){
+        #point estimates -remove intercept, keep var components
+        est <- 
+          fit@beta[-1]%>%exp()%>%
+          sprintf(fmt="%.2f")
+        
+        ci <-
+          confint(fit,method=cimethod,
+                  parm=rownames(summary(fit)$coefficients)[-1])%>%exp()%>%
+          as.data.frame()%>%
+          mutate(across(c(1,2),function(x){sprintf(fmt="%.2f",x)}))
+        
+        #pval -remove intercept
+        pval <- 
+          summary(fit)$coefficients[-1,5]%>%
+          fmtp
       }
       
       if(is.null(dim(ci))){
@@ -930,6 +946,7 @@ coeftab <-
           )
       }
       else{
+        
         df <- 
           data.frame(
             `Estimate`=est,
@@ -988,7 +1005,14 @@ coeftab <-
                          'N','AIC')
       
       df <- rbind(df,mid,bot)
+          
+      if(type=='response'){
+          names(df)[1] <- 'Estimate'
+      }
       
+      if(type=='exp'){
+          names(df)[1] <- 'Exp(beta)'
+      }
       
       
     }
@@ -1520,8 +1544,8 @@ coeftab <-
                            ml[rownames(df)], 
                            rownames(df))  # Replace with corresponding new name
           #reorder rows of df to match order of modlabs
-          top <- df[-(which(rownames(df)=='---')[1]:nrow(df)),]
-          bot <- df[(which(rownames(df)=='---')[1]:nrow(df)),]
+          top <- df[-(grep('---', rownames(df))[1]:nrow(df)),]
+          bot <- df[(grep('---', rownames(df))[1]:nrow(df)),]
           top <- top[match(ml, rownames(top)), ]
           df <- rbind(top, bot)
     }else{stop('error: no modlabs provided in environment')}
