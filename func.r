@@ -39,7 +39,7 @@ function(
     #insert rows with category labels
     n_cats <- length(cat_headers)
     positions <- sapply(cat_header_pos, function(p) grep(p, top$Variable, fixed = TRUE)[1])
-    parts <- list(top[1:(positions[1] - 1), ])
+    parts <- list(top[0:(positions[1] - 1), ])
     for (i in seq_len(n_cats)) {
       parts <- c(parts, list(setNames(data.frame(cat_headers[[i]], NA, NA, NA, NA), names(top))))
       end_row <- if (i < n_cats) positions[i + 1] - 1 else nrow(top)
